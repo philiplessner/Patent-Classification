@@ -9,7 +9,7 @@ from utils import RegexpReplacer
 PATH_INPUT = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
                       'clustering/data/publication-list.txt'])
 PATH_OUTPUT = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
-                       'clustering/data/uspto-full-text/test/'])
+                       'clustering/data/uspto-full-text/packaging/'])
 
 
 def clean_patent(page):
@@ -51,7 +51,7 @@ def clean_patent(page):
 
 def clean_patentapp(page):
     '''
-    Clean up full text patents downloaded from USPTO site
+    Clean up full text patent applications downloaded from USPTO site
     Parameters
         page: object that requests module returns from get method
     Returns
@@ -89,27 +89,28 @@ def clean_patentapp(page):
     return cleantext
 
 
-with io.open(PATH_INPUT, 'r', encoding='latin-1') as f:
-    patents = [line.strip() for line in f]
-pat = re.compile(r'\D')
-for patent in patents:
-    patentn = pat.sub('', patent)
-    if len(patentn) == 7:
-        url = ''.join(['http://patft.uspto.gov/netacgi/nph-Parser?',
-                       'Sect1=PTO1&Sect2=HITOFF',
-                       '&d=PALL&p=1&u=%2Fnetahtml%2FPTO%2Fsrchnum.htm',
-                       '&r=1&f=G&l=50', '&s1=', patentn, '.PN.&OS=PN/',
-                       patentn, '&RS=PN/', patentn])
-        page = requests.get(url)
-        cleaned = clean_patent(page)
-    else:
-        url = ''.join(['http://appft.uspto.gov/netacgi/nph-Parser?',
-                       'Sect1=PTO1&Sect2=HITOFF',
-                       '&d=PG01&p=1&u=%2Fnetahtml%2FPTO%2Fsrchnum.html',
-                       '&r=1&f=G&l=50&s1=%22', patentn, '%22.PGNR.&OS=DN/',
-                       patentn, '&RS=DN/', patentn])
-        page = requests.get(url)
-        cleaned = clean_patentapp(page)
-    filepath = ''.join([PATH_OUTPUT, patent, '.txt'])
-    with io.open(filepath, 'w', encoding='latin-1') as f:
-        f.write(cleaned)
+if __name__ == '__main__':
+    with io.open(PATH_INPUT, 'r', encoding='latin-1') as f:
+        patents = [line.strip() for line in f]
+    pat = re.compile(r'\D')
+    for patent in patents:
+        patentn = pat.sub('', patent)
+        if len(patentn) == 7:
+            url = ''.join(['http://patft.uspto.gov/netacgi/nph-Parser?',
+                           'Sect1=PTO1&Sect2=HITOFF',
+                           '&d=PALL&p=1&u=%2Fnetahtml%2FPTO%2Fsrchnum.htm',
+                           '&r=1&f=G&l=50', '&s1=', patentn, '.PN.&OS=PN/',
+                           patentn, '&RS=PN/', patentn])
+            page = requests.get(url)
+            cleaned = clean_patent(page)
+        else:
+            url = ''.join(['http://appft.uspto.gov/netacgi/nph-Parser?',
+                           'Sect1=PTO1&Sect2=HITOFF',
+                           '&d=PG01&p=1&u=%2Fnetahtml%2FPTO%2Fsrchnum.html',
+                           '&r=1&f=G&l=50&s1=%22', patentn, '%22.PGNR.&OS=DN/',
+                           patentn, '&RS=DN/', patentn])
+            page = requests.get(url)
+            cleaned = clean_patentapp(page)
+        filepath = ''.join([PATH_OUTPUT, patent, '.txt'])
+        with io.open(filepath, 'w', encoding='latin-1') as f:
+            f.write(cleaned)
