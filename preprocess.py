@@ -1,4 +1,5 @@
-from __future__ import print_function
+#coding: utf-8
+from __future__ import print_function, unicode_literals
 import os
 import codecs
 import json
@@ -13,7 +14,7 @@ from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn import manifold
 from sklearn.decomposition import RandomizedPCA
 import matplotlib.pyplot as plt
-from utils import removeNonAscii, RegexpReplacer, lower_case
+from utils import removeNonAscii, RegexpReplacer
 
 # Global constant
 REGEX = re.compile(r",\s*")
@@ -47,33 +48,33 @@ def tokenize_strings(strings):
             strings: list of strings, e.g.,
             [str1, str2, str3... strN]
         Returns
-           lists of unigram tokens separated by commas, e.g.,
+           a generator for a list of unigram tokens separated by commas, e.g.,
            [[tokena1, tokenb1...], [tokena2, tokenb2...]...]
     '''
     tokenizer = RegexpTokenizer('[\w]+')
-    return [tokenizer.tokenize(string) for string in strings]
+    return (tokenizer.tokenize(string) for string in strings)
 
 
 def remove_stopwords(lists_tokens, filePath=None, verbose=False):
     '''Remove stopwords. The stopwords are a union of those from the nltk
        english stopwords files and any custom stopwords in an external file.
        Parameters
-        list_tokens: strings of comma separated tokens, e.g.,
+        list_tokens: a generator for strings of comma separated tokens, e.g.,
                      [[tokena1, tokenb1...], [tokena2, tokenb2...]...]
         filePath: path to file containing custom stopwords. The file
                   should have one stopword per line
         verbose: If True, prints out diagnostic information
         Returns
-            filtered: new lists containing tokens with stopwords removed
+            filtered: new generator containing tokens with stopwords removed
     '''
     english_stops = set(stopwords.words('english'))
     if filePath:
         with codecs.open(filePath, 'r', 'utf-8') as f:
             combined_stops = set([line.strip() for line in f])
     stops = english_stops | combined_stops
-    filtered = [[token for token in tokens
-                 if token not in stops]
-                for tokens in lists_tokens]
+    filtered = ((token for token in tokens
+                 if token not in stops)
+                for tokens in lists_tokens)
     if verbose:
         print(stops)
         total = 0
@@ -97,9 +98,9 @@ def stem(lists_tokens):
                      [[tokena1s, tokenb1s...], [tokena2s, tokenb2s...]...]
     '''
     english_stemmer = SnowballStemmer('english')
-    stemmed = [[english_stemmer.stem(token)
-                for token in tokens]
-               for tokens in lists_tokens]
+    stemmed = ((english_stemmer.stem(token)
+                for token in tokens)
+               for tokens in lists_tokens)
     return stemmed
 
 
@@ -111,11 +112,11 @@ def flatten(lists_tokens, sep=', '):
             list_tokens: lists containing strings of tokens, e.g.,
                          [[tokena1, tokenb1...], [tokena2, tokenb2...]...]
         Returns
-            tokens_w: a list containing strings of tokens
+            tokens_w: a generator for strings of tokens
                       separated by sep, e.g.,
                       ['tokena1, tokena2,...', 'tokenb1, tokenb2,...',...]
     '''
-    return [sep.join(l) for l in lists_tokens]
+    return (sep.join(l) for l in lists_tokens)
 
 
 def patent_tokenizer(data, PATH_REPLACE=None, PATH_SW=None):
@@ -127,7 +128,7 @@ def patent_tokenizer(data, PATH_REPLACE=None, PATH_SW=None):
             PATH_REPLACE: path to json file with replacement patterns
             PATH_SW: path to txt file with stop words
         Returns
-            tokens_w: a list containing tokenized strings, e.g.,
+             a list containing tokenized strings, e.g.,
                       [ 'tokena1 tokena2...', 'tokenb1 tokenb2...' ]
     '''
     fname = PATH_REPLACE
@@ -135,13 +136,13 @@ def patent_tokenizer(data, PATH_REPLACE=None, PATH_SW=None):
         d = json.load(f)
     replacement_patterns = [(key, value) for key, value in d[0].items()]
     replacer = RegexpReplacer(patterns=replacement_patterns)
-    cleaned = [replacer.replace(datum) for datum in data]
-    lowercase = lower_case(cleaned)
+    cleaned = (replacer.replace(datum) for datum in data)
+    lowercase = (element.lower() for element in cleaned)
     tokenized = tokenize_strings(lowercase)
     filtered = remove_stopwords(tokenized, PATH_SW)
     stemmed = stem(filtered)
-    list_tokens = flatten(stemmed, sep=', ')
-    return list_tokens
+    gen_tokens = flatten(stemmed, sep=', ')
+    return [tokens for tokens in gen_tokens]
 
 
 def custom_tokenizer(text):
