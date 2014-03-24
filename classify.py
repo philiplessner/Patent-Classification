@@ -1,9 +1,11 @@
 from __future__ import print_function
+import numpy as np
+import pandas as pd
 from sklearn.datasets import load_files
-from sklearn.naive_bayes import MultinomialNB
+# from sklearn.naive_bayes import MultinomialNB
 from sklearn.linear_model import PassiveAggressiveClassifier
 from sklearn.cross_validation import ShuffleSplit, cross_val_score
-from sklearn.metrics import classification_report
+# from sklearn.metrics import classification_report
 from sklearn.metrics import confusion_matrix
 import preprocess as pp
 from utils import removeNonAscii
@@ -51,16 +53,16 @@ PATH_REPLACE = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
 PATH_SW = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
                    'clustering/custom/combined-stop-words.txt'])
 PATH_DATA = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
-                     'clustering/data/categories/'])
+                     'clustering/data/new-summaries/'])
 
 
 # Get the training and testing data
 patentdict = loadClassifiedData(PATH_DATA)
 categories = patentdict['target']
 data = patentdict['data']
-for datum, category in zip(data, categories):
-    print (str(category))
-    print(datum[0:100])
+# for datum, category in zip(data, categories):
+#     print(str(category))
+#     print(datum[0:100])
 
 data_stripped = [removeNonAscii(item) for item in data]
 
@@ -87,8 +89,8 @@ pp.pca_metric(vectorized, patentdict)
 # Train the classifier
 #clf = MultinomialNB()
 clf = PassiveAggressiveClassifier(C=1)
-cv = ShuffleSplit(len(data_stripped), n_iter=5,
-                  test_size=0.5, random_state=42)
+cv = ShuffleSplit(len(data_stripped), n_iter=10,
+                  test_size=0.7, random_state=42)
 
 # Get information on what the classifier learned
 fitted = clf.fit(transformed, categories)
@@ -97,14 +99,35 @@ print('****Feature Weights****\n', feature_weights)
 display_important_features(feature_names, target_names, feature_weights)
 
 # Calculate the classifier metrics
+f1_scores = []
+cms = []
+for train, test in cv:
+    X_train, y_train = transformed[train], categories[train]
+    X_test, y_test = transformed[test], categories[test]
+    clf.fit(X_train, y_train)
+    train_score = clf.score(X_train, y_train)
+    test_score = clf.score(X_test, y_test)
+    predicted = clf.predict(X_test)
+    f1_scores.append(test_score)
+    cms.append(confusion_matrix(y_test, predicted))
+print('****F1 Test Scores****\n')
+for f1_score in f1_scores:
+    print('\t {0:0.3f}'.format(f1_score))
 scores = cross_val_score(clf, transformed, categories, cv=cv)
-print('f1 scores: ')
-print(['{:.3f}'.format(val) for val in scores])
-print('Accuracy: {0:0.3f} (+/- {1:0.4f})\n'.format(scores.mean(),
-                                                   scores.std() / 2))
-predicted = clf.predict(transformed)
-print('****Classification Report****\n')
-print(classification_report(categories, predicted,
-                            target_names=patentdict['target_names']))
+# print('f1 scores: ')
+# print(['{:.3f}'.format(val) for val in scores])
+print('Average: {0:0.3f}\nStd Dev: {1:0.4f}\n'.format(scores.mean(),
+                                                      scores.std()))
+mat = np.matrix(sum(cms))
+frac = np.round(mat / mat.sum(axis=1, dtype='float'), decimals=3)
 print('****Confusion Matrix****\n')
-print(confusion_matrix(categories, predicted))
+df = pd.DataFrame(dict(zip(target_names, frac.transpose())),
+                  columns=target_names)
+df['names'] = target_names
+df['# of documents'] = [categories[categories == i].shape[0]
+                        for i in range(len(target_names))]
+print(df)
+# predicted = clf.predict(transformed)
+# print('****Classification Report****\n')
+# print(classification_report(categories, predicted,
+                            # target_names=patentdict['target_names']))
