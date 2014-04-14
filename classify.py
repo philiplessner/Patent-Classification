@@ -1,6 +1,7 @@
 from __future__ import print_function
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from sklearn.datasets import load_files
 # from sklearn.naive_bayes import MultinomialNB
 from sklearn.linear_model import PassiveAggressiveClassifier
@@ -87,10 +88,8 @@ print('\n****Feature Names****\n', feature_names)
 pp.pca_metric(vectorized, patentdict)
 
 # Train the classifier
-#clf = MultinomialNB()
+# clf = MultinomialNB()
 clf = PassiveAggressiveClassifier(C=1)
-cv = ShuffleSplit(len(data_stripped), n_iter=10,
-                  test_size=0.7, random_state=42)
 
 # Get information on what the classifier learned
 fitted = clf.fit(transformed, categories)
@@ -99,6 +98,8 @@ print('****Feature Weights****\n', feature_weights)
 display_important_features(feature_names, target_names, feature_weights)
 
 # Calculate the classifier metrics
+cv = ShuffleSplit(len(data_stripped), n_iter=10,
+                  test_size=0.7, random_state=42)
 f1_scores = []
 cms = []
 for train, test in cv:
@@ -127,7 +128,23 @@ df['names'] = target_names
 df['# of documents'] = [categories[categories == i].shape[0]
                         for i in range(len(target_names))]
 print(df)
+
+fig = plt.figure(figsize=(10., 10.))
+ax = fig.add_subplot(111)
+plt.matshow(frac, fignum=False, cmap='Blues', vmin=0., vmax=1.0)
+ax.set_xticks(range(len(target_names)))
+ax.set_xticklabels(target_names)
+ax.set_yticks(range(len(target_names)))
+ax.set_yticklabels(target_names)
+ax.xaxis.set_ticks_position('bottom')
+plt.xlabel('Predicted Class')
+plt.ylabel('True Class')
+plt.title('Confusion Matrix')
+plt.grid(False)
+plt.colorbar()
+plt.show()
+
 # predicted = clf.predict(transformed)
 # print('****Classification Report****\n')
 # print(classification_report(categories, predicted,
-                            # target_names=patentdict['target_names']))
+# target_names=patentdict['target_names']))
