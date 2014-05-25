@@ -33,7 +33,7 @@ def loadClassifiedData(pathtraining):
     return dataDict
 
 
-def display_important_features(feature_names, target_names, clf, n_top=30):
+def display_important_features(patentdict, vectordict, clf, n_top=30):
     '''
     Display highest weighted and lowest weighted feastures for each category
     Parameters
@@ -42,27 +42,27 @@ def display_important_features(feature_names, target_names, clf, n_top=30):
         clf: classifier instance
         n_top: number of features to display
     '''
-    clf.fit(transformed, categories)
+    clf.fit(vectordict['tfidf_vectors'], patentdict['target'])
     weights = clf.coef_
     print('****Feature Weights****\n', weights)
-    for i, target_name in enumerate(target_names):
+    for i, target_name in enumerate(patentdict['target_names']):
         print("Class: " + target_name)
         print("")
 
         sorted_features_indices = weights[i].argsort()[::-1]
 
         most_important = sorted_features_indices[:n_top]
-        print(", ".join("{0}: {1:.4f}".format(feature_names[j], weights[i, j])
+        print(", ".join("{0}: {1:.4f}".format(vectordict['feature_names'][j], weights[i, j])
                         for j in most_important))
         print("...")
 
         least_important = sorted_features_indices[-n_top:]
-        print(", ".join("{0}: {1:.4f}".format(feature_names[j], weights[i, j])
+        print(", ".join("{0}: {1:.4f}".format(vectordict['feature_names'][j], weights[i, j])
                         for j in least_important))
         print("")
 
 
-def classifier_metrics(transformed, patentdict, clf, cv):
+def classifier_metrics(vectordict, patentdict, clf, cv):
     '''
     Calculate f1 scores, confusion matrix, class Probabilities
     for several cv splits
@@ -87,8 +87,9 @@ def classifier_metrics(transformed, patentdict, clf, cv):
     targetd = dict(zip(range(len(patentdict['target_names']) + 1),
                        patentdict['target_names']))
     for i, (train, test) in enumerate(cv):
-        X_train, y_train = transformed[train], categories[train]
-        X_test, y_test = transformed[test], categories[test]
+        X_train, y_train = vectordict[
+            'tfidf_vectors'][train], categories[train]
+        X_test, y_test = vectordict['tfidf_vectors'][test], categories[test]
         clf.fit(X_train, y_train)
         # train_score = clf.score(X_train, y_train)
         test_score = clf.score(X_test, y_test)
@@ -125,7 +126,7 @@ def classifier_metrics(transformed, patentdict, clf, cv):
     return cms, f1_scores, df_p
 
 
-def classifier_scores(f1_scores):
+def classifier_scores(f1_scores, patentdict, vectordict, clf, cv):
     '''
     Prints f1 scores for cv runs and mean and std of  scores
     Parameter
@@ -134,14 +135,15 @@ def classifier_scores(f1_scores):
     print('****F1 Test Scores****\n')
     for f1_score in f1_scores:
         print('\t {0:0.3f}'.format(f1_score))
-    scores = cross_val_score(clf, transformed, categories, cv=cv)
+    scores = cross_val_score(clf, vectordict['tfidf_vectors'],
+                             patentdict['target'], cv=cv)
     # print('f1 scores: ')
     # print(['{:.3f}'.format(val) for val in scores])
     print('Average: {0:0.3f}\nStd Dev: {1:0.4f}\n'.format(scores.mean(),
                                                           scores.std()))
 
 
-def output_confusionmatrix(cms, categories, target_names):
+def output_confusionmatrix(cms, patentdict):
     '''
     Prints avg confusion matrix and also plots it
     Parameters
@@ -155,21 +157,21 @@ def output_confusionmatrix(cms, categories, target_names):
 
     # Print normailized average confusion matrix
     print('****Confusion Matrix****\n')
-    df = pd.DataFrame(dict(zip(target_names, frac.transpose())),
-                      columns=target_names)
-    df['names'] = target_names
-    df['# of documents'] = [categories[categories == i].shape[0]
-                            for i in range(len(target_names))]
+    df = pd.DataFrame(dict(zip(patentdict['target_names'], frac.transpose())),
+                      columns=patentdict['target_names'])
+    df['names'] = patentdict['target_names']
+    df['# of documents'] = [patentdict['target'][patentdict['target'] == i].shape[0]
+                            for i in range(len(patentdict['target_names']))]
     print(df)
 
     # Plot confusion matrix
     fig = plt.figure(figsize=(10., 10.))
     ax = fig.add_subplot(111)
     plt.matshow(frac, fignum=False, cmap='Blues', vmin=0., vmax=1.0)
-    ax.set_xticks(range(len(target_names)))
-    ax.set_xticklabels(target_names)
-    ax.set_yticks(range(len(target_names)))
-    ax.set_yticklabels(target_names)
+    ax.set_xticks(range(len(patentdict['target_names'])))
+    ax.set_xticklabels(patentdict['target_names'])
+    ax.set_yticks(range(len(patentdict['target_names'])))
+    ax.set_yticklabels(patentdict['target_names'])
     ax.xaxis.set_ticks_position('bottom')
     plt.xlabel('Predicted Class')
     plt.ylabel('True Class')
@@ -196,7 +198,8 @@ def plot_roc(auc_score, tpr, fpr, label=None):
     plt.show()
 
 
-if __name__ == '__main__':
+def main():
+
     # Global Constants
     PATH_REPLACE = ''.join(['/Users/dpmlto1/Documents/Patent/',
                             'Thomson Innovation/',
@@ -208,37 +211,36 @@ if __name__ == '__main__':
 
     # Get the training and testing data
     patentdict = loadClassifiedData(PATH_DATA)
-    categories = patentdict['target']
     data = patentdict['data']
 
     data_stripped = [removeNonAscii(item) for item in data]
 
-    # Preprocess and tokenize
-    list_tokens = pp.patent_tokenizer(data_stripped,
-                                      PATH_REPLACE=PATH_REPLACE,
-                                      PATH_SW=PATH_SW)
+    # Preprocess
+    list_tokens = pp.patent_preprocessor(data_stripped,
+                                         PATH_REPLACE=PATH_REPLACE,
+                                         PATH_SW=PATH_SW)
 
-    # Vectorize
-    (transformed, patenttransformer,
-     vectorized, patentvectorizer) = pp.tokens_tovectors(list_tokens,
-                                                         verbose=False)
-    feature_names = patentvectorizer.get_feature_names()
-    target_names = patentdict['target_names']
-    pp.vector_characteristics(vectorized, transformed,
-                              feature_names, target_names)
-    pp.pca_metric(vectorized, patentdict)
+    # Tokenize and Vectorize
+    vectordict = pp.tokens_tovectors(list_tokens, verbose=False)
+    vectordict['feature_names'] = vectordict['countvector_instance'].get_feature_names()
+    pp.vector_characteristics(patentdict, vectordict)
+    pp.pca_metric(patentdict, vectordict)
 
     # Train the classifier
     clf = SGDClassifier(loss='log', shuffle=True)
 
     # Get information on what the classifier learned
-    display_important_features(feature_names, target_names, clf)
+    display_important_features(patentdict, vectordict, clf)
 
     # Calculate the classifier metrics
     cv = ShuffleSplit(len(data_stripped), n_iter=10,
                       test_size=0.7, random_state=42)
-    cms, f1_scores, df_p = classifier_metrics(transformed, patentdict, clf, cv)
-    classifier_scores(f1_scores)
-    output_confusionmatrix(cms, categories, target_names)
+    cms, f1_scores, df_p = classifier_metrics(vectordict, patentdict, clf, cv)
+    classifier_scores(f1_scores, patentdict, vectordict, clf, cv)
+    output_confusionmatrix(cms, patentdict)
     print('****Class Probabilities****')
     print(df_p.head())
+
+
+if __name__ == '__main__':
+    main()
