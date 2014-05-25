@@ -1,4 +1,4 @@
-#coding: utf-8
+# coding: utf-8
 from __future__ import print_function, unicode_literals
 import os
 import codecs
@@ -14,7 +14,7 @@ from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn import manifold
 from sklearn.decomposition import RandomizedPCA
 import matplotlib.pyplot as plt
-from utils import removeNonAscii, RegexpReplacer
+from utils import removeNonAscii, RegexpReplacer, pipe
 
 # Global constant
 REGEX = re.compile(r",\s*")
@@ -119,7 +119,7 @@ def flatten(lists_tokens, sep=', '):
     return (sep.join(l) for l in lists_tokens)
 
 
-def patent_tokenizer(data, PATH_REPLACE=None, PATH_SW=None):
+def patent_preprocessor(data, PATH_REPLACE=None, PATH_SW=None):
     '''Workflow for taking a lists of strings and tokenizing them
        into a form that Scikit-learn can use.
         Parameters
@@ -136,10 +136,10 @@ def patent_tokenizer(data, PATH_REPLACE=None, PATH_SW=None):
         d = json.load(f)
     replacement_patterns = [(key, value) for key, value in d[0].items()]
     replacer = RegexpReplacer(patterns=replacement_patterns)
-    cleaned = (replacer.replace(datum) for datum in data)
-    lowercase = (element.lower() for element in cleaned)
-    tokenized = tokenize_strings(lowercase)
-    filtered = remove_stopwords(tokenized, PATH_SW)
+    clean = lambda data: (replacer.replace(datum) for datum in data)
+    ls_tolower = lambda ls: (element.lower() for element in ls)
+    tokenized = pipe((clean, ), (ls_tolower, ), (tokenize_strings, ))(data)
+    filtered = remove_stopwords(tokenized, filePath=PATH_SW)
     stemmed = stem(filtered)
     gen_tokens = flatten(stemmed, sep=', ')
     return [tokens for tokens in gen_tokens]
@@ -152,7 +152,7 @@ def custom_tokenizer(text):
 def tokens_tovectors(list_tokens, verbose=True):
     '''Convert word tokens to vectors.
         Parameters
-            tokens_w: strings of whitespace separated tokens (features)
+            list_tokens: strings of whitespace separated tokens (features)
             verbose: True to print additional diagnositc information
         Returns
             patentvectorizer: class of CountVectorizer with initialized
@@ -163,6 +163,7 @@ def tokens_tovectors(list_tokens, verbose=True):
             transformed: tf-idf values for each feature
 
     '''
+
     patentvectorizer = CountVectorizer(tokenizer=custom_tokenizer,
                                        max_df=0.95,
                                        decode_error='ignore')
@@ -180,7 +181,11 @@ def tokens_tovectors(list_tokens, verbose=True):
         print('****Transformed****')
         print(transformed)
         print(transformed.toarray())
-    return transformed, patenttransformer, vectorized, patentvectorizer
+    vectordict = {'tfidf_vectors': transformed,
+                  'tfidf_instance': patenttransformer,
+                  'count_vectors': vectorized,
+                  'countvector_instance': patentvectorizer}
+    return vectordict
 
 
 def vector_metrics(vectors, plot=True):
@@ -198,8 +203,17 @@ def vector_metrics(vectors, plot=True):
     return x, y
 
 
-def pca_metric(vectors, d):
-    vector_pca = RandomizedPCA(n_components=2).fit_transform(vectors)
+def vector_characteristics(patentdict, vectordict):
+    print('Vectorized Shape: ', vectordict['count_vectors'].shape)
+    print('Transformed Shape: ', vectordict['tfidf_vectors'].shape)
+    print('Number of Categories: ', len(patentdict['target_names']))
+    print('\n****Target Names***\n', patentdict['target_names'])
+    print('Number of Features:', len(vectordict['feature_names']))
+    print('\n****Feature Names****\n', vectordict['feature_names'])
+
+
+def pca_metric(d, vd):
+    vector_pca = RandomizedPCA(n_components=2).fit_transform(vd['count_vectors'])
     colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
     plt.figure()
     for i, c in zip(np.unique(d['target']), cycle(colors)):
