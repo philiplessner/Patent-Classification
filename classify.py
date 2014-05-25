@@ -5,10 +5,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.datasets import load_files
-# from sklearn.naive_bayes import MultinomialNB
-# from sklearn.linear_model import PassiveAggressiveClassifier
 from sklearn.linear_model import SGDClassifier
-# from sklearn.svm import SVC
 # from sklearn.grid_search import GridSearchCV
 from sklearn.cross_validation import ShuffleSplit, cross_val_score
 from sklearn.metrics import roc_curve, auc
@@ -45,7 +42,7 @@ def display_important_features(feature_names, target_names, clf, n_top=30):
         clf: classifier instance
         n_top: number of features to display
     '''
-    fitted = clf.fit(transformed, categories)
+    clf.fit(transformed, categories)
     weights = clf.coef_
     print('****Feature Weights****\n', weights)
     for i, target_name in enumerate(target_names):
@@ -65,25 +62,31 @@ def display_important_features(feature_names, target_names, clf, n_top=30):
         print("")
 
 
-def classifier_metrics(transformed, categories, clf, cv):
+def classifier_metrics(transformed, patentdict, clf, cv):
     '''
-    Calculate f1 scores and confusion matrix for several cv splits
+    Calculate f1 scores, confusion matrix, class Probabilities
+    for several cv splits
     Parameters
         transformed: X vector (TF-IDF for each feature/category)
-        categories: y vector
+        patentdict
         clf: classifier instance
         cv: cross validation instance
     Returns
         cms: confusion matrix averaged over cv runs
         f1_scores: f1 score for each cv run
+        df_p: pandas dataframe with probabities for each class
     '''
+    categories = patentdict['target']
     labels = np.unique(categories)
     f1_scores = []
     cms = []
     tprs = defaultdict(list)
     fprs = defaultdict(list)
     roc_scores = defaultdict(list)
-    for train, test in cv:
+    df_p = pd.DataFrame()
+    targetd = dict(zip(range(len(patentdict['target_names']) + 1),
+                       patentdict['target_names']))
+    for i, (train, test) in enumerate(cv):
         X_train, y_train = transformed[train], categories[train]
         X_test, y_test = transformed[test], categories[test]
         clf.fit(X_train, y_train)
@@ -92,15 +95,34 @@ def classifier_metrics(transformed, categories, clf, cv):
         predicted = clf.predict(X_test)
         f1_scores.append(test_score)
         cms.append(confusion_matrix(y_test, predicted))
-        # for label in labels:
-        #     y_label_test = np.asarray(y_test == label, dtype=int)
-        #     proba = clf.predict_proba(X_test)
-        #     proba_label = proba[:, label]
-        #     fpr, tpr, roc_thresholds = roc_curve(y_label_test, proba_label)
-        #     roc_scores[label].append(auc(fpr, tpr))
-        #     tprs[label].append(tpr)
-        #     fprs[label].append(fpr)
-    return cms, f1_scores
+        # Probablities for each class
+        proba = clf.predict_proba(X_test)
+        df_t = pd.DataFrame(proba, columns=patentdict['target_names'])
+        df_t['category_num'] = y_test
+        df_t['category_name'] = df_t['category_num'].map(targetd)
+        df_t['files'] = [os.path.splitext(os.path.basename(filename))[0]
+                         for filename in patentdict['filenames'][test]]
+        df_p = df_p.append(df_t)
+        if i == (len(cv) - 1):
+            for label in labels:
+                y_label_test = np.asarray(y_test == label, dtype=int)
+                proba_label = proba[:, label]
+                fpr, tpr, roc_thresholds = roc_curve(y_label_test, proba_label)
+                roc_scores[label].append(auc(fpr, tpr))
+                tprs[label].append(tpr)
+                fprs[label].append(fpr)
+                scores_to_sort = roc_scores[label]
+                median = np.argsort(
+                    scores_to_sort)[int(len(scores_to_sort) / 2)]
+                plot_roc(roc_scores[label][median], tprs[label][median],
+                         fprs[label][median],
+                         label='{} vs rest'.format(
+                             patentdict['target_names'][label]))
+
+    ordercols = (['category_name', 'category_num', 'files'] +
+                 patentdict['target_names'])
+    df_p = df_p.reindex_axis(ordercols, axis=1, copy=False)
+    return cms, f1_scores, df_p
 
 
 def classifier_scores(f1_scores):
@@ -157,7 +179,7 @@ def output_confusionmatrix(cms, categories, target_names):
     plt.show()
 
 
-def plot_roc(auc_score, name, tpr, fpr, label=None):
+def plot_roc(auc_score, tpr, fpr, label=None):
     plt.clf()
     plt.figure(num=None, figsize=(5, 4))
     plt.grid(True)
@@ -172,26 +194,6 @@ def plot_roc(auc_score, name, tpr, fpr, label=None):
               verticalalignment="bottom")
     plt.legend(loc="lower right")
     plt.show()
-
-
-def probs_class(patentdict, transformed, clf):
-    '''
-    Probabilities of classes for each data
-    '''
-    df_p = pd.DataFrame(clf.predict_proba(transformed),
-                        columns=patentdict['target_names'])
-    df_p['category_num'] = patentdict['target']
-    targetl = patentdict['target'].tolist()
-    targetd = dict(zip(range(len(patentdict['target_names']) + 1),
-                       patentdict['target_names']))
-    for k, v in targetd.iteritems():
-        for i, e in enumerate(targetl):
-            if k == e:
-                targetl[i] = v
-    df_p['category_name'] = targetl
-    df_p['files'] = [os.path.splitext(os.path.basename(filename))[0]
-                     for filename in patentdict['filenames']]
-    return df_p
 
 
 if __name__ == '__main__':
@@ -227,8 +229,6 @@ if __name__ == '__main__':
     pp.pca_metric(vectorized, patentdict)
 
     # Train the classifier
-    # clf = MultinomialNB()
-    Cp = [0.01, 0.1, 1.0]
     clf = SGDClassifier(loss='log', shuffle=True)
 
     # Get information on what the classifier learned
@@ -237,13 +237,8 @@ if __name__ == '__main__':
     # Calculate the classifier metrics
     cv = ShuffleSplit(len(data_stripped), n_iter=10,
                       test_size=0.7, random_state=42)
-    cms, f1_scores = classifier_metrics(transformed, categories, clf, cv)
+    cms, f1_scores, df_p = classifier_metrics(transformed, patentdict, clf, cv)
     classifier_scores(f1_scores)
     output_confusionmatrix(cms, categories, target_names)
-
-    # Train Model on full dataset
-    clf.fit(transformed, categories)
-    # Get probablities of each class
     print('****Class Probabilities****')
-    df_p = probs_class(patentdict, transformed, clf)
     print(df_p.head())
