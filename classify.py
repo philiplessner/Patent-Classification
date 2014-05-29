@@ -2,14 +2,17 @@ from __future__ import print_function, division, unicode_literals
 from collections import defaultdict
 import os
 import numpy as np
+from scipy.stats import sem
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.datasets import load_files
-from sklearn.linear_model import SGDClassifier
-# from sklearn.grid_search import GridSearchCV
+from sklearn.linear_model import SGDClassifier, LogisticRegression
+from sklearn.grid_search import GridSearchCV
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.svm import SVC
 from sklearn.cross_validation import ShuffleSplit, cross_val_score
-from sklearn.metrics import roc_curve, auc
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import roc_curve, auc, confusion_matrix, f1_score
 import preprocess as pp
 from utils import removeNonAscii
 
@@ -42,9 +45,9 @@ def display_important_features(patentdict, vectordict, clf, n_top=30):
         clf: classifier instance
         n_top: number of features to display
     '''
-    clf.fit(vectordict['tfidf_vectors'], patentdict['target'])
+    clf.fit(vectordict['tfidf_vectors'].toarray(), patentdict['target'])
     weights = clf.coef_
-    print('****Feature Weights****\n', weights)
+    print('\n***Classifier Features***\n')
     for i, target_name in enumerate(patentdict['target_names']):
         print("Class: " + target_name)
         print("")
@@ -90,14 +93,13 @@ def classifier_metrics(vectordict, patentdict, clf, cv):
         X_train, y_train = vectordict[
             'tfidf_vectors'][train], categories[train]
         X_test, y_test = vectordict['tfidf_vectors'][test], categories[test]
-        clf.fit(X_train, y_train)
+        clf.fit(X_train.toarray(), y_train)
         # train_score = clf.score(X_train, y_train)
-        test_score = clf.score(X_test, y_test)
-        predicted = clf.predict(X_test)
-        f1_scores.append(test_score)
+        predicted = clf.predict(X_test.toarray())
+        f1_scores.append(f1_score(y_test, predicted, average='micro'))
         cms.append(confusion_matrix(y_test, predicted))
         # Probablities for each class
-        proba = clf.predict_proba(X_test)
+        proba = clf.predict_proba(X_test.toarray())
         df_t = pd.DataFrame(proba, columns=patentdict['target_names'])
         df_t['category_num'] = y_test
         df_t['category_name'] = df_t['category_num'].map(targetd)
@@ -133,9 +135,9 @@ def classifier_scores(f1_scores, patentdict, vectordict, clf, cv):
         f1_scores: array of f1 scores for several cv runs
     '''
     print('****F1 Test Scores****\n')
-    for f1_score in f1_scores:
-        print('\t {0:0.3f}'.format(f1_score))
-    scores = cross_val_score(clf, vectordict['tfidf_vectors'],
+    for f1score in f1_scores:
+        print('\t {0:0.3f}'.format(f1score))
+    scores = cross_val_score(clf, vectordict['tfidf_vectors'].toarray(),
                              patentdict['target'], cv=cv)
     # print('f1 scores: ')
     # print(['{:.3f}'.format(val) for val in scores])
@@ -198,9 +200,37 @@ def plot_roc(auc_score, tpr, fpr, label=None):
     plt.show()
 
 
+def display_scores(params, scores, append_star=False):
+    """Format the mean score +/- std error for params"""
+    params = ", ".join("{0}={1}".format(k, v)
+                       for k, v in params.items())
+    line = "{0}:\t{1:.3f} (+/-{2:.3f})".format(
+        params, np.mean(scores), sem(scores))
+    if append_star:
+        line += " *"
+    return line
+
+
+def display_grid_scores(grid_scores, top=None):
+    """Helper function to format a report on a grid of scores"""
+
+    grid_scores = sorted(grid_scores, key=lambda x: x[1], reverse=True)
+    if top is not None:
+        grid_scores = grid_scores[:top]
+
+    # Compute a threshold for staring models with overlapping
+    # stderr:
+    _, best_mean, best_scores = grid_scores[0]
+    threshold = best_mean - 2 * sem(best_scores)
+
+    for params, mean_score, scores in grid_scores:
+        append_star = mean_score + 2 * sem(scores) > threshold
+        print(display_scores(params, scores, append_star=append_star))
+
+
 def main():
 
-    # Global Constants
+    # Paths to files
     PATH_REPLACE = ''.join(['/Users/dpmlto1/Documents/Patent/',
                             'Thomson Innovation/',
                             'clustering/custom/replacements.json'])
@@ -222,19 +252,43 @@ def main():
 
     # Tokenize and Vectorize
     vectordict = pp.tokens_tovectors(list_tokens, verbose=False)
-    vectordict['feature_names'] = vectordict['countvector_instance'].get_feature_names()
+    vectordict['feature_names'] = vectordict[
+        'countvector_instance'].get_feature_names()
     pp.vector_characteristics(patentdict, vectordict)
+
+    print('\n***Principal Component Analysis***\n')
     pp.pca_metric(patentdict, vectordict)
 
     # Train the classifier
-    clf = SGDClassifier(loss='log', shuffle=True)
+    # clf = SGDClassifier(loss='log', shuffle=True)
+    # clf = RandomForestClassifier(n_estimators=100)
+    # clf = MultinomialNB(alpha=0.001)
+    # clf = LogisticRegression(C=500.0)
+    # clf = SVC(C=1.0, kernel=str('linear'), gamma=1.0, probability=True)
+    estimator_type = LogisticRegression
+    estimator_params = {'C': np.array([0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]),
+                        'penalty': ['l1', 'l2']}
+    gs_clf = GridSearchCV(estimator_type(), estimator_params,
+                          scoring='f1', cv=5)
+    gs_clf.fit(vectordict['tfidf_vectors'].toarray(), patentdict['target'])
 
+    print('\n***Grid Search Report***\n')
+    print('***Estimator***\n', gs_clf, '\n')
+    print('***Scores***\n')
+    display_grid_scores(gs_clf.grid_scores_, top=20)
+
+    clf = estimator_type(**gs_clf.best_params_)
     # Get information on what the classifier learned
-    display_important_features(patentdict, vectordict, clf)
+    try:
+        display_important_features(patentdict, vectordict, clf)
+    except AttributeError:
+        print('Class has no coef_ Property')
+    except ValueError:
+        print('Class has no coef_ Property')
 
     # Calculate the classifier metrics
     cv = ShuffleSplit(len(data_stripped), n_iter=10,
-                      test_size=0.7, random_state=42)
+                      test_size=0.5, random_state=42)
     cms, f1_scores, df_p = classifier_metrics(vectordict, patentdict, clf, cv)
     classifier_scores(f1_scores, patentdict, vectordict, clf, cv)
     output_confusionmatrix(cms, patentdict)
