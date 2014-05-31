@@ -11,7 +11,7 @@ from sklearn.grid_search import GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import SVC
-from sklearn.cross_validation import ShuffleSplit, cross_val_score
+from sklearn.cross_validation import ShuffleSplit, train_test_split
 from sklearn.metrics import roc_curve, auc, confusion_matrix, f1_score
 import preprocess as pp
 from utils import removeNonAscii
@@ -55,17 +55,19 @@ def display_important_features(patentdict, vectordict, clf, n_top=30):
         sorted_features_indices = weights[i].argsort()[::-1]
 
         most_important = sorted_features_indices[:n_top]
-        print(", ".join("{0}: {1:.4f}".format(vectordict['feature_names'][j], weights[i, j])
+        print(", ".join("{0}: {1:.4f}".format(vectordict['feature_names'][j],
+                                              weights[i, j])
                         for j in most_important))
         print("...")
 
         least_important = sorted_features_indices[-n_top:]
-        print(", ".join("{0}: {1:.4f}".format(vectordict['feature_names'][j], weights[i, j])
+        print(", ".join("{0}: {1:.4f}".format(vectordict['feature_names'][j],
+                                              weights[i, j])
                         for j in least_important))
         print("")
 
 
-def classifier_metrics(vectordict, patentdict, clf, cv):
+def classifier_metrics(patentdict, vectordict, clf, cv):
     '''
     Calculate f1 scores, confusion matrix, class Probabilities
     for several cv splits
@@ -80,12 +82,8 @@ def classifier_metrics(vectordict, patentdict, clf, cv):
         df_p: pandas dataframe with probabities for each class
     '''
     categories = patentdict['target']
-    labels = np.unique(categories)
     f1_scores = []
     cms = []
-    tprs = defaultdict(list)
-    fprs = defaultdict(list)
-    roc_scores = defaultdict(list)
     df_p = pd.DataFrame()
     targetd = dict(zip(range(len(patentdict['target_names']) + 1),
                        patentdict['target_names']))
@@ -96,7 +94,7 @@ def classifier_metrics(vectordict, patentdict, clf, cv):
         clf.fit(X_train.toarray(), y_train)
         # train_score = clf.score(X_train, y_train)
         predicted = clf.predict(X_test.toarray())
-        f1_scores.append(f1_score(y_test, predicted, average='micro'))
+        f1_scores.append(f1_score(y_test, predicted, average='weighted'))
         cms.append(confusion_matrix(y_test, predicted))
         # Probablities for each class
         proba = clf.predict_proba(X_test.toarray())
@@ -106,21 +104,6 @@ def classifier_metrics(vectordict, patentdict, clf, cv):
         df_t['files'] = [os.path.splitext(os.path.basename(filename))[0]
                          for filename in patentdict['filenames'][test]]
         df_p = df_p.append(df_t)
-        if i == (len(cv) - 1):
-            for label in labels:
-                y_label_test = np.asarray(y_test == label, dtype=int)
-                proba_label = proba[:, label]
-                fpr, tpr, roc_thresholds = roc_curve(y_label_test, proba_label)
-                roc_scores[label].append(auc(fpr, tpr))
-                tprs[label].append(tpr)
-                fprs[label].append(fpr)
-                scores_to_sort = roc_scores[label]
-                median = np.argsort(
-                    scores_to_sort)[int(len(scores_to_sort) / 2)]
-                plot_roc(roc_scores[label][median], tprs[label][median],
-                         fprs[label][median],
-                         label='{} vs rest'.format(
-                             patentdict['target_names'][label]))
 
     ordercols = (['category_name', 'category_num', 'files'] +
                  patentdict['target_names'])
@@ -137,12 +120,8 @@ def classifier_scores(f1_scores, patentdict, vectordict, clf, cv):
     print('****F1 Test Scores****\n')
     for f1score in f1_scores:
         print('\t {0:0.3f}'.format(f1score))
-    scores = cross_val_score(clf, vectordict['tfidf_vectors'].toarray(),
-                             patentdict['target'], cv=cv)
-    # print('f1 scores: ')
-    # print(['{:.3f}'.format(val) for val in scores])
-    print('Average: {0:0.3f}\nStd Dev: {1:0.4f}\n'.format(scores.mean(),
-                                                          scores.std()))
+    print('Average: {0:0.3f}\nStd Dev: {1:0.4f}\n'.format(np.mean(f1_scores),
+                                                          np.std(f1_scores)))
 
 
 def output_confusionmatrix(cms, patentdict):
@@ -181,6 +160,33 @@ def output_confusionmatrix(cms, patentdict):
     plt.grid(False)
     plt.colorbar()
     plt.show()
+
+
+def calculate_roc(patentdict, vectordict, clf):
+    categories = patentdict['target']
+    labels = np.unique(categories)
+    tprs = defaultdict(list)
+    fprs = defaultdict(list)
+    roc_scores = defaultdict(list)
+    X_train, X_test, y_train, y_test = train_test_split(
+        vectordict['tfidf_vectors'],
+        patentdict['target'],
+        test_size=0.5)
+    proba = clf.predict_proba(X_test.toarray())
+    for label in labels:
+        y_label_test = np.asarray(y_test == label, dtype=int)
+        proba_label = proba[:, label]
+        fpr, tpr, roc_thresholds = roc_curve(y_label_test, proba_label)
+        roc_scores[label].append(auc(fpr, tpr))
+        tprs[label].append(tpr)
+        fprs[label].append(fpr)
+        scores_to_sort = roc_scores[label]
+        median = np.argsort(
+            scores_to_sort)[int(len(scores_to_sort) / 2)]
+        plot_roc(roc_scores[label][median], tprs[label][median],
+                 fprs[label][median],
+                 label='{} vs rest'.format(
+                     patentdict['target_names'][label]))
 
 
 def plot_roc(auc_score, tpr, fpr, label=None):
@@ -242,20 +248,12 @@ def main():
     # Get the training and testing data
     patentdict = loadClassifiedData(PATH_DATA)
     data = patentdict['data']
-
     data_stripped = [removeNonAscii(item) for item in data]
 
-    # Preprocess
-    list_tokens = pp.patent_preprocessor(data_stripped,
-                                         PATH_REPLACE=PATH_REPLACE,
-                                         PATH_SW=PATH_SW)
-
     # Tokenize and Vectorize
-    vectordict = pp.tokens_tovectors(list_tokens, verbose=False)
-    vectordict['feature_names'] = vectordict[
-        'countvector_instance'].get_feature_names()
+    vectordict = pp.patent_totfidf(data_stripped, PATH_REPLACE=PATH_REPLACE,
+                                   PATH_SW=PATH_SW)
     pp.vector_characteristics(patentdict, vectordict)
-
     print('\n***Principal Component Analysis***\n')
     pp.pca_metric(patentdict, vectordict)
 
@@ -268,6 +266,7 @@ def main():
     estimator_type = LogisticRegression
     estimator_params = {'C': np.array([0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]),
                         'penalty': ['l1', 'l2']}
+    # estimator_params = {'alpha': [0.001, 0.005, 0.01, 0.1, 1]}
     gs_clf = GridSearchCV(estimator_type(), estimator_params,
                           scoring='f1', cv=5)
     gs_clf.fit(vectordict['tfidf_vectors'].toarray(), patentdict['target'])
@@ -289,8 +288,9 @@ def main():
     # Calculate the classifier metrics
     cv = ShuffleSplit(len(data_stripped), n_iter=10,
                       test_size=0.5, random_state=42)
-    cms, f1_scores, df_p = classifier_metrics(vectordict, patentdict, clf, cv)
+    cms, f1_scores, df_p = classifier_metrics(patentdict, vectordict, clf, cv)
     classifier_scores(f1_scores, patentdict, vectordict, clf, cv)
+    calculate_roc(patentdict, vectordict, clf)
     output_confusionmatrix(cms, patentdict)
     print('****Class Probabilities****')
     print(df_p.head())
