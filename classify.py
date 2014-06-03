@@ -1,11 +1,11 @@
 from __future__ import print_function, division, unicode_literals
 from collections import defaultdict
 import os
+import dill
 import numpy as np
 from scipy.stats import sem
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.datasets import load_files
 from sklearn.linear_model import SGDClassifier, LogisticRegression
 from sklearn.grid_search import GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
@@ -13,27 +13,8 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import SVC
 from sklearn.cross_validation import ShuffleSplit, train_test_split
 from sklearn.metrics import roc_curve, auc, confusion_matrix, f1_score
+from sklearn.externals import joblib
 import preprocess as pp
-from utils import removeNonAscii
-
-
-def loadClassifiedData(pathtraining):
-    '''
-    Loads classified data to be used for training or a model
-    or to perform a training/testing split
-    Returns:
-        X_data: A list containing strings read from the files
-        y_target: A ndarray containing the classification
-                categories which have been converted to numbers.
-        Each string in X_data corresponds to a category in
-        y_target
-    '''
-    dataDict = load_files(pathtraining,
-                          description=None, categories=None,
-                          load_content=True, shuffle=True,
-                          encoding='latin-1', decode_error='strict',
-                          random_state=0)
-    return dataDict
 
 
 def display_important_features(patentdict, vectordict, clf, n_top=30):
@@ -234,6 +215,34 @@ def display_grid_scores(grid_scores, top=None):
         print(display_scores(params, scores, append_star=append_star))
 
 
+def pickle_vectorvocab(patentvector_instance):
+    filepath = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
+                        'clustering/data/vectorvocab.pkl'])
+    with open(filepath, 'w') as f:
+        vectorfile = dill.dump(patentvector_instance, f)
+    return vectorfile
+
+
+def pickle_bestclassifier(gs_clf):
+    filepath = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
+                        'clustering/data/classifier.pkl'])
+    clffile = joblib.dump(gs_clf.best_estimator_, filepath, compress=9)
+    return clffile
+
+
+def patent_predict(vectorfile, clffile):
+    clf = joblib.load(clffile[0])
+    # X = tfidf_instance.transform(data)
+    filepath = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
+                        'clustering/data/vectorvocab.pkl'])
+    with open(filepath, 'r') as f:
+        tfidf_instance = dill.load(f)
+    print(clf)
+    print(tfidf_instance)
+    # predicted_class = clf.predict(X)
+    # return predicted_class
+
+
 def main():
 
     # Paths to files
@@ -246,16 +255,16 @@ def main():
                          'clustering/data/new-summaries/'])
 
     # Get the training and testing data
-    patentdict = loadClassifiedData(PATH_DATA)
-    data = patentdict['data']
-    data_stripped = [removeNonAscii(item) for item in data]
-
-    # Tokenize and Vectorize
-    vectordict = pp.patent_totfidf(data_stripped, PATH_REPLACE=PATH_REPLACE,
-                                   PATH_SW=PATH_SW)
-    pp.vector_characteristics(patentdict, vectordict)
+    patentdict = pp.loadClassifiedData(PATH_DATA)
+    # Preprocess, Tokenize, and Vectorize
+    pv = pp.PatentVectorizer(patentdict['data'], PATH_REPLACE=PATH_REPLACE,
+                             PATH_SW=PATH_SW)
+    vectordict = pv.patent_totfidf()
+    vectorfile = pickle_vectorvocab(vectordict['tfidf_instance'])
+    # Properties of the vectorized data
+    pv.vector_characteristics(patentdict)
     print('\n***Principal Component Analysis***\n')
-    pp.pca_metric(patentdict, vectordict)
+    pv.pca_metric(patentdict)
 
     # Train the classifier
     # clf = SGDClassifier(loss='log', shuffle=True)
@@ -263,13 +272,17 @@ def main():
     # clf = MultinomialNB(alpha=0.001)
     # clf = LogisticRegression(C=500.0)
     # clf = SVC(C=1.0, kernel=str('linear'), gamma=1.0, probability=True)
-    estimator_type = LogisticRegression
-    estimator_params = {'C': np.array([0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]),
-                        'penalty': ['l1', 'l2']}
-    # estimator_params = {'alpha': [0.001, 0.005, 0.01, 0.1, 1]}
+    estimator_type = MultinomialNB
+    # estimator_params = {'C': np.array([0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]),
+                        # 'penalty': ['l1', 'l2']}
+    estimator_params = {'alpha': [0.001, 0.005, 0.01, 0.1, 1]}
     gs_clf = GridSearchCV(estimator_type(), estimator_params,
                           scoring='f1', cv=5)
     gs_clf.fit(vectordict['tfidf_vectors'].toarray(), patentdict['target'])
+    # gs_clf.fit(vectordict['tfidf_vectors'], patentdict['target'])
+
+    # Pickle the best estimator
+    clffile = pickle_bestclassifier(gs_clf)
 
     print('\n***Grid Search Report***\n')
     print('***Estimator***\n', gs_clf, '\n')
@@ -286,7 +299,7 @@ def main():
         print('Class has no coef_ Property')
 
     # Calculate the classifier metrics
-    cv = ShuffleSplit(len(data_stripped), n_iter=10,
+    cv = ShuffleSplit(len(patentdict['data']), n_iter=10,
                       test_size=0.5, random_state=42)
     cms, f1_scores, df_p = classifier_metrics(patentdict, vectordict, clf, cv)
     classifier_scores(f1_scores, patentdict, vectordict, clf, cv)
@@ -294,6 +307,8 @@ def main():
     output_confusionmatrix(cms, patentdict)
     print('****Class Probabilities****')
     print(df_p.head())
+
+    patent_predict(vectorfile, clffile)
 
 
 if __name__ == '__main__':
