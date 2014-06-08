@@ -72,19 +72,24 @@ def classifier_metrics(patentdict, vectordict, clf, cv):
         predicted = clf.predict(X_test.toarray())
         f1_scores.append(f1_score(y_test, predicted, average='weighted'))
         cms.append(confusion_matrix(y_test, predicted))
-        # Probablities for each class
-        proba = clf.predict_proba(X_test.toarray())
-        df_t = pd.DataFrame(proba, columns=patentdict['target_names'])
-        df_t['category_num'] = y_test
-        df_t['category_name'] = df_t['category_num'].map(targetd)
-        df_t['files'] = [os.path.splitext(os.path.basename(filename))[0]
-                         for filename in patentdict['filenames'][test]]
-        df_p = df_p.append(df_t)
+        df_p = df_p.append(category_probs(X_test, y_test, clf,
+                                          patentdict['target_names'], targetd,
+                                          patentdict['filenames'][test]))
 
     ordercols = (['category_name', 'category_num', 'files'] +
                  patentdict['target_names'])
     df_p = df_p.reindex_axis(ordercols, axis=1, copy=False)
     return cms, f1_scores, df_p
+
+
+def category_probs(X, y, clf, target_names, targetd, filenames):
+    proba = clf.predict_proba(X.toarray())
+    df_t = pd.DataFrame(proba, columns=target_names)
+    df_t['category_num'] = y
+    df_t['category_name'] = df_t['category_num'].map(targetd)
+    df_t['files'] = [os.path.splitext(os.path.basename(filename))[0]
+                     for filename in filenames]
+    return df_t
 
 
 def classifier_scores(f1_scores, patentdict, vectordict, clf, cv):
@@ -210,12 +215,16 @@ def display_grid_scores(grid_scores, top=None):
         print(display_scores(params, scores, append_star=append_star))
 
 
-def pickle_vectorvocab(patentvector_instance):
-    filepath = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
-                        'clustering/data/vectorvocab.pkl'])
+def pickle_withdill(tobepickled, filepath):
     with open(filepath, 'w') as f:
-        vectorfile = dill.dump(patentvector_instance, f)
-    return vectorfile
+        pickledfile = dill.dump(tobepickled, f)
+    return pickledfile
+
+
+def unpickle_withdill(filepath):
+    with open(filepath, 'r') as f:
+        unpickled = dill.load(f)
+    return unpickled
 
 
 def pickle_bestclassifier(gs_clf):
@@ -225,14 +234,14 @@ def pickle_bestclassifier(gs_clf):
     return clffile
 
 
-def patent_predict(vectorfile, clffile):
+def patent_predict(data, vector_filepath, clffile):
     clf = joblib.load(clffile[0])
-    # X = tfidf_instance.transform(data)
-    filepath = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
-                        'clustering/data/vectorvocab.pkl'])
-    with open(filepath, 'r') as f:
-        tfidf_instance = dill.load(f)
+    tfidf_instance = unpickle_withdill(vector_filepath)
     print(clf)
     print(tfidf_instance)
-    # predicted_class = clf.predict(X)
-    # return predicted_class
+    X = tfidf_instance.transform(data)
+    predicted_class = clf.predict(X)
+    predicted = {'clf': clf,
+                 'X': X,
+                 'y': predicted_class}
+    return predicted
