@@ -113,25 +113,26 @@ class PatentVectorizer(object):
                            'feature_names': patentvectorizer.get_feature_names()}
         return self.vectordict
 
-    def vector_characteristics(self, patentdict):
+    def vector_characteristics(self, labels=None):
         '''
         Print some vector characteristics
         '''
         print('Transformed Shape: ', self.vectordict['tfidf_vectors'].shape)
-        print('Number of Categories: ', len(patentdict['target_names']))
-        print('\n****Target Names***\n', patentdict['target_names'])
         print('Number of Features:', len(self.vectordict['feature_names']))
         print('\n****Feature Names****\n', self.vectordict['feature_names'])
+        if labels:
+            print('Number of Categories: ', len(labels))
+            print('\n****Target Names***\n', labels)
 
-    def pca_metric(self, d):
+    def pca_metric(self, cl, labels):
         vector_pca = TruncatedSVD(
             n_components=2).fit_transform(self.vectordict['tfidf_vectors'])
         colors = ['b', 'g', 'r', 'y', 'k', 'c', 'm']
         plt.figure(figsize=(10, 10))
-        for i, c in zip(np.unique(d['target']), cycle(colors)):
-            plt.scatter(vector_pca[d['target'] == i, 0],
-                        vector_pca[d['target'] == i, 1],
-                        c=c, label=d['target_names'][i], alpha=1.0)
+        for i, c in zip(np.unique(cl), cycle(colors)):
+            plt.scatter(vector_pca[cl == i, 0],
+                        vector_pca[cl == i, 1],
+                        c=c, label=labels[i], alpha=1.0)
 
         plt.legend(loc='best')
         plt.show()
