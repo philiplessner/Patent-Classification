@@ -16,45 +16,56 @@ from sklearn.decomposition import TruncatedSVD
 from utils import removeNonAscii, RegexpReplacer
 
 
-def file_tostring(PATH_DATA):
-    '''Read text files into a list of strings
-        Parameter
-            PATH_DATA: Path to data files
-        Returns
-            data: list of strings
-            filenames: list of filenames read
-    '''
-    data = []
-    filenames = []
-    for root, folders, files in os.walk(PATH_DATA):
-        for filename in files:
-            filenames.append(filename)
-            filePath = os.path.join(root, filename)
-            with io.open(filePath, 'r', encoding='latin_1',
-                         errors='replace') as f:
-                raw = f.read()
-                data.append(raw)
-    return data, filenames
+class DataLoader(object):
 
+    def __init__(self, PATH_DATA=None, encoding='latin-1'):
+        '''
+        Parameters
+            PATH_DATA: path to top level directory where data files
+                       are located
+            encoding: character encoding of files
+        '''
+        self.PATH_DATA = PATH_DATA
+        self.encoding = encoding
+        if not PATH_DATA:
+            print('****No Path to Data Provided****')
 
-def loadClassifiedData(pathtraining):
-    '''
-    Loads classified data to be used for training or a model
-    or to perform a training/testing split
-    Parameter
-        pathtraining: path to top level directory where
-                      classified data is located
-    Returns:
-        dataDict: {'data': list of strings, one string per document
-                   'target': array of  category labels correspoding to data
-                   'target_names': names of the categories}
-    '''
-    dataDict = load_files(pathtraining,
-                          description=None, categories=None,
-                          load_content=True, shuffle=True,
-                          encoding='latin-1', decode_error='strict',
-                          random_state=0)
-    return dataDict
+    def load_unclassified_data(self):
+        '''
+        Read text files into a list of strings
+            Returns
+                datadict: {'data': list of strings, one string per document
+                            'filenames': list of filenames}
+        '''
+        data = []
+        filenames = []
+        for root, folders, files in os.walk(self.PATH_DATA):
+            for filename in files:
+                filenames.append(filename)
+                filePath = os.path.join(root, filename)
+                with io.open(filePath, 'r', encoding=self.encoding,
+                             errors='replace') as f:
+                    raw = f.read()
+                    data.append(raw)
+        datadict = {'data': data,
+                    'filenames': filenames}
+        return datadict
+
+    def load_classified_data(self):
+        '''
+        Loads classified data to be used for training or a model
+        or to perform a training/testing split
+        Returns:
+            dataDict: {'data': list of strings, one string per document
+                       'target': array of  category labels correspoding to data
+                       'target_names': names of the categories}
+        '''
+        dataDict = load_files(self.PATH_DATA,
+                              description=None, categories=None,
+                              load_content=True, shuffle=True,
+                              encoding=self.encoding, decode_error='strict',
+                              random_state=0)
+        return dataDict
 
 
 class PatentVectorizer(object):
