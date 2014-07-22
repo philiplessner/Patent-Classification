@@ -4,6 +4,7 @@ import os
 import io
 import json
 from itertools import cycle
+from functools import partial
 import numpy as np
 import matplotlib.pyplot as plt
 from nltk.tokenize import RegexpTokenizer
@@ -13,6 +14,7 @@ from sklearn.datasets import load_files
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn import manifold
 from sklearn.decomposition import TruncatedSVD
+from toolz import pipe
 from utils import removeNonAscii, RegexpReplacer
 
 
@@ -92,18 +94,17 @@ class PatentVectorizer(object):
         Returns
             a list of tokens from string
         '''
-        # Strip non-ascii characters
-        s_acii = removeNonAscii(document)
-        # Replacements in string
-        clean = self.replacer.replace(s_acii)
-        # Lower case string
-        lower_case = clean.lower()
-        # Tokenize string to list of tokens
-        tokenized = RegexpTokenizer('[\w]+').tokenize(lower_case)
-        # Remove stop words from list of tokens
-        filtered = [token for token in tokenized if token not in self.stops]
-        # Stem list of tokens
-        return [self.english_stemmer.stem(token) for token in filtered]
+        # Strip non-ascii characters, Replacements in string
+        # Lower case string, Tokenize string to list of tokens
+        # Remove stop words from list of tokens, Stem list of tokens
+        stop_filter = lambda token: True if token not in self.stops else False
+        return pipe(document,
+                    removeNonAscii,
+                    self.replacer.replace,
+                    unicode.lower,
+                    RegexpTokenizer('[\w]+').tokenize,
+                    partial(filter, stop_filter),
+                    partial(map, self.english_stemmer.stem))
 
     def patent_totfidf(self):
         '''
