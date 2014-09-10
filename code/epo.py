@@ -20,7 +20,7 @@ def find(key, dictionary):
 
 def main2():
     PATH_INPUT = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
-                          'clustering/2015-05-17-Patentb.txt'])
+                          'clustering/nonus_toclassify.txt'])
     PATH_OUTPUT = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
                            'clustering/data/unclassified/'])
     with io.open(PATH_INPUT, 'r', encoding='latin-1') as f:
@@ -60,9 +60,13 @@ def main2():
             t1 = desc_d['ops:world-patent-data']['ftxt:fulltext-documents']
             desc_body = t1['ftxt:fulltext-document']['description']
             if isinstance(desc_body['p'], dict):
-                description = '\n'.join([re.sub(r'\[\d+\]', '', value)
-                                         for key, value in desc_body[
-                                             'p']['$'].iteritems()])
+                if isinstance(desc_body['p']['$'], dict):
+                    description = '\n'.join([re.sub(r'\[\d+\]', '', value)
+                                             for key, value in desc_body[
+                                                 'p']['$'].iteritems()])
+                elif isinstance(desc_body['p']['$'], unicode):
+                    description = desc_body['p']['$']
+
             elif isinstance(desc_body['p'], list):
                 description = '\n'.join([re.sub(r'\[\d+\]', '', item['$'])
                                          for item in desc_body['p']])

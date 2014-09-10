@@ -9,12 +9,11 @@ def cluster(vectors, num_clusters=3):
             vectorized: samples, features matrix
             num_clusters: number of KMeans clusters
        Returns:
-            km: cluster number for each sample
+            km.labels_: cluster number for each sample
     '''
     km = KMeans(n_clusters=num_clusters, init='random', n_init=1, verbose=1)
     km.fit(vectors)
-    labels = km.labels_
-    return km, labels
+    return km, km.labels_
 
 
 def cluster_metrics(km, labels, vectors):

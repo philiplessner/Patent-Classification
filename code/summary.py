@@ -16,9 +16,11 @@ from utils import lower_case, RegexpReplacer
 
 
 class MakeSummary(object):
+
     '''
     Methods for summarizing text
     '''
+
     def __init__(self, r):
         '''
         Parameter
@@ -228,7 +230,8 @@ class RakeKeywordExtractor(object):
             return sorted_phrase_scores[0:int(n_phrases / self.top_fraction)]
         else:
             return map(lambda x: x[0],
-                       sorted_phrase_scores[0:int(n_phrases / self.top_fraction)])
+                       sorted_phrase_scores[0:int(n_phrases
+                                                  / self.top_fraction)])
 
 
 def isPunct(word):
@@ -321,18 +324,25 @@ def make_summary(d):
     return '\n'.join([sumo.patentsum(d[key]) for key in d.keys()])
 
 
-if __name__ == '__main__':
+def main():
     # Initial Setup
     BASE_PATH = ''.join(['/Users/dpmlto1/Documents/Patent/',
                          'Thomson Innovation/clustering/custom/'])
     PATH_DATA = ''.join(['/Users/dpmlto1/Documents/Patent/',
-                         'Thomson Innovation/clustering/data/uspto-full-text'])
+                         'Thomson Innovation/clustering/data/',
+                         'unclassified/'])
     PATH_OUTPUT = ''.join(['/Users/dpmlto1/Documents/Patent/',
                            'Thomson Innovation/clustering/data/',
-                           'new-summaries/'])
+                           'unclassified-summaries/'])
     # Get set-up data
     section_titles = open_strip(''.join([BASE_PATH, 'section-titles.txt']))
     filtered_titles = open_strip(''.join([BASE_PATH, 'filtered-titles.txt']))
+
+    # Clean summary directories of old data
+    for root, folders, files in os.walk(PATH_OUTPUT):
+        for filename in files:
+            filePath = os.path.join(root, filename)
+            os.remove(filePath)
 
     # Split into sections
     for root, folders, files in os.walk(PATH_DATA):
@@ -346,3 +356,7 @@ if __name__ == '__main__':
                                                filename)]),
                          'w', encoding='latin_1') as f:
                 f.write(make_summary(filtered_dict))
+
+
+if __name__ == '__main__':
+    main()

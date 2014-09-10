@@ -9,7 +9,7 @@ def main():
     PATH_DATA = ''.join(['/Users/dpmlto1/Documents/Patent/',
                          'Thomson Innovation/clustering/data/',
                          'unclassified-summaries/'])
-    data, filenames = pp.file_tostring(PATH_DATA)
+    datadict = pp.DataLoader(PATH_DATA=PATH_DATA).load_unclassified_data()
     # Perform the classification
     vector_filepath = ''.join(['/Users/dpmlto1/Documents/Patent/'
                                'Thomson Innovation/clustering/',
@@ -19,12 +19,12 @@ def main():
                                      'data/targetnames.pkl'])
     clffile = [''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
                         'clustering/data/classifier.pkl'])]
-    predicted = cl.patent_predict(data, vector_filepath, clffile)
+    predicted = cl.patent_predict(datadict['data'], vector_filepath, clffile)
     category_names = cl.unpickle_withdill(categoryname_filepath)
     targetd = dict(zip(range(len(category_names) + 1), category_names))
     # Make the classfication report
     df_p = cl.category_probs(predicted['X'], predicted['y'], predicted['clf'],
-                             category_names, targetd, filenames)
+                             category_names, targetd, datadict['filenames'])
     ordercols = (['category_name', 'category_num', 'files'] + category_names)
     df_p = df_p.reindex_axis(ordercols, axis=1, copy=False)
     df_p.to_csv(''.join(['/Users/dpmlto1/Documents/Patent/'

@@ -7,9 +7,9 @@ from lxml import html
 from utils import RegexpReplacer
 
 PATH_INPUT = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
-                      'clustering/data/publication-list.txt'])
+                      'clustering/us_toclassify.txt'])
 PATH_OUTPUT = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
-                       'clustering/data/uspto-full-text/packaging/'])
+                       'clustering/data/unclassified/'])
 
 
 def clean_patent(page):

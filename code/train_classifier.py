@@ -19,37 +19,41 @@ def main():
     PATH_SW = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
                        'clustering/custom/combined-stop-words.txt'])
     PATH_DATA = ''.join(['/Users/dpmlto1/Documents/Patent/Thomson Innovation/',
-                         'clustering/data/new-summaries/'])
+                         'clustering/data/train-test-summaries/'])
 
     # Get the training and testing data
-    patentdict = pp.loadClassifiedData(PATH_DATA)
+    patentdict = pp.DataLoader(PATH_DATA=PATH_DATA).load_classified_data()
+    # Save the category names so when have them for use with unclassified data
+    cl.pickle_withdill(patentdict['target_names'],
+                       ''.join(['/Users/dpmlto1/Documents/',
+                                'Patent/Thomson Innovation/',
+                                'clustering/data/targetnames.pkl']))
     # Preprocess, Tokenize, and Vectorize
     pv = pp.PatentVectorizer(patentdict['data'], PATH_REPLACE=PATH_REPLACE,
                              PATH_SW=PATH_SW)
     vectordict = pv.patent_totfidf()
-    vectorfile = cl.pickle_vectorvocab(vectordict['tfidf_instance'])
+    # Save the instance for later use on unclassified data
+    cl.pickle_withdill(vectordict['tfidf_instance'],
+                       ''.join(['/Users/dpmlto1/Documents/',
+                                'Patent/Thomson Innovation/',
+                                'clustering/data/vectorvocab.pkl']))
     # Properties of the vectorized data
-    pv.vector_characteristics(patentdict)
+    pv.vector_characteristics(labels=patentdict['target_names'])
     print('\n***Principal Component Analysis***\n')
-    pv.pca_metric(patentdict)
+    pv.pca_metric(patentdict['target'], patentdict['target_names'])
 
     # Train the classifier
-    # clf = SGDClassifier(loss='log', shuffle=True)
-    # clf = RandomForestClassifier(n_estimators=100)
-    # clf = MultinomialNB(alpha=0.001)
-    # clf = LogisticRegression(C=500.0)
-    # clf = SVC(C=1.0, kernel=str('linear'), gamma=1.0, probability=True)
-    estimator_type = MultinomialNB
+    clf_list = [MultinomialNB, SGDClassifier, RandomForestClassifier,
+                LogisticRegression, SVC]
+    estimator_type = clf_list[0]
     # estimator_params = {'C': np.array([0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]),
                         # 'penalty': ['l1', 'l2']}
     estimator_params = {'alpha': [0.001, 0.005, 0.01, 0.1, 1]}
     gs_clf = GridSearchCV(estimator_type(), estimator_params,
                           scoring='f1', cv=5)
     gs_clf.fit(vectordict['tfidf_vectors'].toarray(), patentdict['target'])
-    # gs_clf.fit(vectordict['tfidf_vectors'], patentdict['target'])
-
     # Pickle the best estimator
-    clffile = cl.pickle_bestclassifier(gs_clf)
+    cl.pickle_bestclassifier(gs_clf)
 
     print('\n***Grid Search Report***\n')
     print('***Estimator***\n', gs_clf, '\n')
@@ -75,8 +79,6 @@ def main():
     cl.output_confusionmatrix(cms, patentdict)
     print('****Class Probabilities****')
     print(df_p.head())
-
-    cl.patent_predict(vectorfile, clffile)
 
 
 if __name__ == '__main__':
