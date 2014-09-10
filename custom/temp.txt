@@ -1,0 +1,7 @@
+    "[Ee]quivalent [Ss]eries [Rr]esistance": " ESR ",
+    "[Ii]ductance": " ESL ",
+    "[Ee]quivalent [Ss]eries [Ii]ductance": " ESL ",
+    "[Ii]ntrinsically [Cc]onductive [Pp]olymer": " ICP ",
+    "[Cc]onductive [Pp]olymer": " ICP ",
+    "[Ox]ide [Ff]ilm": " dielectric ",
+    "[Pp]oly[( )]3,4-ethylenedioxythiophene[) ]": " PEDOT ",
